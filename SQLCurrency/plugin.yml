@@ -1,0 +1,5 @@
+name: SQLCurrency
+main: com.sucy.sql.SQLCurrency
+version: 1.0
+author: Eniripsa96
+depend: [MCCore, SQLManager]
