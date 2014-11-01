@@ -1,19 +1,30 @@
 package com.sucy.sql;
 
+import java.security.SecureRandom;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.HashMap;
+import java.util.Random;
 import java.util.UUID;
 
+import net.milkbowl.vault.permission.Permission;
+
+import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
+import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 
 import com.rit.sucy.config.Config;
-import com.rit.sucy.player.PlayerUUIDs;
 import com.rit.sucy.sql.ColumnType;
 import com.rit.sucy.sql.direct.SQLEntry;
 import com.rit.sucy.sql.direct.SQLTable;
@@ -23,20 +34,31 @@ import com.rit.sucy.sql.direct.SQLTable;
  * using a MySQL database.</p>
  */
 public class SQLCurrency extends JavaPlugin implements Listener {
-
+	public static Permission permission = null;
     private enum Action { ADD, SUBTRACT, SET };
 
     private final HashMap<UUID, Integer> funds = new HashMap<UUID, Integer>();
-
+    
     private SQLTable table;
     private int defaultMoney;
+    
+	final String DRIVER = "com.mysql.jdbc.Driver";
+	final String DATABASE = "gamerwu85_site";
+	final String CONNECTION = "jdbc:mysql://159.253.0.127/" + DATABASE;
 
+	final String USERNAME = "gamerwu85_dedi1";
+	
+	final String PASSWORD = "TxuXi44x";
+	
     /**
      * <p>Enables the plugin, setting up the MySQL connections.</p>
      * <p>This should not ever be called by other plugins.</p>
      */
     @Override
     public void onEnable() {
+    	setupPermissions();
+        getServer().getPluginManager().registerEvents(this, this);
+        
         table = SQLManager.getTable(this, "players");
         table.createColumn("username", ColumnType.STRING_32);
         table.createColumn("balance", ColumnType.INT);
@@ -51,9 +73,17 @@ public class SQLCurrency extends JavaPlugin implements Listener {
             new UpdateTask(player.getName(), player.getUniqueId()).runTaskAsynchronously(this);
         }
 
-        getServer().getPluginManager().registerEvents(this, this);
+        //run repeating task to tell everyone in list that they are already registered
     }
-
+    public void setupPermissions(){
+    	RegisteredServiceProvider<Permission> permissionProvider = getServer().getServicesManager().getRegistration(net.milkbowl.vault.permission.Permission.class);
+        if (permissionProvider != null) {
+            permission = permissionProvider.getProvider();
+        }
+    }
+	public void vote(Player p){
+		new VoteTask(p).runTaskAsynchronously(this);
+	}
     /**
      * <p>Clears up event handlers before exiting.</p>
      */
@@ -61,7 +91,22 @@ public class SQLCurrency extends JavaPlugin implements Listener {
     public void onDisable() {
         HandlerList.unregisterAll((JavaPlugin)this);
     }
-
+    public static boolean isPremium(Player p){
+    	if(permission.has(p, "premium.normal"))
+    		return true;
+    	return false;
+    }
+    public static boolean isPremiumPlus(Player p){
+    	if(permission.has(p, "premium.plus"))
+    		return true;
+    	return false;
+    }
+    public static  void addPremium(Player p){
+    	permission.playerAdd(p, "premium.normal");
+    }
+    public static void addPremiumPlus(Player p){
+    	permission.playerAdd(p, "premium.plus");
+    }
     /**
      * <p>Loads a player's balance when they join the server.</p>
      *
@@ -73,7 +118,10 @@ public class SQLCurrency extends JavaPlugin implements Listener {
             new UpdateTask(event.getName(), event.getUniqueId()).run();
         }
     }
-
+    public void registerPlayer(Player p, String email, String password){
+    	
+    	new RegisterTask(p,email,password).runTaskAsynchronously(this);
+    }
     /**
      * <p>Adds a specified amount to a player's balance.</p>
      *
@@ -146,7 +194,113 @@ public class SQLCurrency extends JavaPlugin implements Listener {
             }
         }
     }
+    private class RegisterTask extends BukkitRunnable {
+        private Player p;
+        private String email;
+        private String password;
+        private String salt;
+       
+        public RegisterTask(Player p, String email, String password) {
+            this.p = p;
+            this.email = email;
+            Random r = new SecureRandom();
+            byte[] saltInBytes = new byte[16];
+            r.nextBytes(saltInBytes);
+            String salt = new String(saltInBytes);
+            this.salt = salt;
+            this.password = Md5.getHash(password, salt);
+            
+        }
+        @Override
+        public void run() {
+        	if(!email.contains("@") || !email.contains(".")){
+        		p.sendMessage(ChatColor.RED + "Your email is bad formatted");
+        		return;
+        	}else if(email.length() <= 7){
+        		p.sendMessage(ChatColor.RED + "Your email needs to be longer then 7 characters");
+        		return;
+        	}else if(password.length() <= 8){
+        		p.sendMessage(ChatColor.RED + "Your password needs to be longer then 8 characters");
+        		return;
+        	}
+        	try {
+        		Class.forName("com.mysql.jdbc.Driver");
+    			Connection con = DriverManager.getConnection(CONNECTION +
+                        "?user="+ USERNAME+"&password=" + PASSWORD);
+    			Statement stmt = con.createStatement();
+    			String q = "SELECT * FROM `members` WHERE `email`=" + "'" +email +"'";
+    			ResultSet rs = stmt.executeQuery(q);
+    			Statement stmt2 = con.createStatement();
+    			String q2 = "SELECT * FROM `members` WHERE `uuid`=" + "'" +p.getUniqueId() +"'";
+    			ResultSet rs2 = stmt2.executeQuery(q2);
+        		if(rs.next()){
+        			p.sendMessage(ChatColor.AQUA + "This e-mail address is already in use.");
+        		}else if(rs2.next()){
+        			p.sendMessage(ChatColor.AQUA + "You already registered an account.");
+        		}else{
+    			Statement statement = con.createStatement();
+    			String querry = "INSERT INTO `members`(`uuid`, `username`, `password`, `email`, `money`,`salt`) VALUES ('" + p.getUniqueId() + "','" + p.getName() + "','" +password+"','"+email +"','"+ get(p)+"','"+ salt +"')";
+    			statement.executeUpdate(querry);
+    			p.sendMessage(ChatColor.AQUA + "Account registered. Your e-mail address is " + ChatColor.YELLOW + email + ChatColor.AQUA + ".");
+    			rs.close();
+    			rs2.close();
+    			stmt.close();
+    			stmt2.close();
+    			statement.close();
+    			con.close();
+        		}
+    		} catch (SQLException e) {
+    			e.printStackTrace();
+    		} catch (ClassNotFoundException e) {
+    			e.printStackTrace();
+    		}
+        }
+    }
+    class VoteTask extends BukkitRunnable {
+    	Player p;
+    	public VoteTask(Player p) {
+    		this.p = p;
 
+    	}
+
+    	@Override
+    	public void run() {
+
+			Connection con;
+			try {
+	    		Class.forName(DRIVER);
+				con = DriverManager.getConnection(CONNECTION,USERNAME,PASSWORD);
+				Statement stmt = con.createStatement();
+				String q = "SELECT * FROM `members` WHERE `username`=" + "'" +p.getName() +"'";
+				ResultSet rs = stmt.executeQuery(q);
+				if(rs.next()){
+					Statement stmt2 = con.createStatement();
+					q = "UPDATE `members` SET `voteCount` = `voteCount` + 1";
+					stmt2.executeUpdate(q);
+					Statement stmt3 = con.createStatement();
+					q = "SELECT `voteCount` FROM `members` WHERE `username`=" + "'" +p.getName() +"'";
+					ResultSet rs3 = stmt3.executeQuery(q);
+					if(rs3.next()){
+						p.sendMessage( ChatColor.AQUA + "Thanks for voting towards the network! You now have " + ChatColor.YELLOW + rs3.getString("voteCount") + ".00 voting points" +ChatColor.AQUA + ".");
+					}
+					rs3.close();
+					stmt3.close();
+					stmt2.close();
+				}else{
+					p.sendMessage( ChatColor.AQUA + "You need an account to earn voting points. Please do /register <email> <password>");
+				}
+				rs.close();
+				stmt.close();
+				con.close();
+			} catch (SQLException | ClassNotFoundException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			
+
+    	}
+
+    }
     private class UpdateTask extends BukkitRunnable {
         private String name;
         private UUID id;

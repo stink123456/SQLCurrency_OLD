@@ -5,5 +5,7 @@
 	<classpathentry kind="lib" path="C:/Users/too/Desktop/servers/Testing/craftbukkit.jar"/>
 	<classpathentry kind="lib" path="C:/Users/too/Downloads/SQLManager (3).jar"/>
 	<classpathentry kind="lib" path="C:/Users/too/Downloads/MCCore (4).jar"/>
+	<classpathentry kind="lib" path="mysql-connector-java-5.1.33-bin.jar"/>
+	<classpathentry kind="lib" path="C:/Users/too/Downloads/Vault-1.4.1.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>
