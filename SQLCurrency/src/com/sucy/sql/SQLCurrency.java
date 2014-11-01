@@ -12,7 +12,6 @@ import java.util.UUID;
 
 import net.milkbowl.vault.permission.Permission;
 
-import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -54,7 +53,8 @@ public class SQLCurrency extends JavaPlugin implements Listener {
      * <p>Enables the plugin, setting up the MySQL connections.</p>
      * <p>This should not ever be called by other plugins.</p>
      */
-    @Override
+    @SuppressWarnings("deprecation")
+	@Override
     public void onEnable() {
     	setupPermissions();
         getServer().getPluginManager().registerEvents(this, this);
