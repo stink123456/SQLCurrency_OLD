@@ -20,6 +20,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
@@ -36,44 +37,57 @@ public class SQLCurrency extends JavaPlugin implements Listener {
 	public static Permission permission = null;
     private enum Action { ADD, SUBTRACT, SET };
 
-    private final HashMap<UUID, Integer> funds = new HashMap<UUID, Integer>();
-    private final HashMap<UUID, Integer> credits = new HashMap<UUID, Integer>();
+    private static final HashMap<String, Integer> fundsChange = new HashMap<String, Integer>();
+    private static final HashMap<String, Integer> creditsChange = new HashMap<String, Integer>();
+
+    private final HashMap<UUID, Integer> funds    = new HashMap<UUID, Integer>();
+    private final HashMap<UUID, Integer> credits  = new HashMap<UUID, Integer>();
     private SQLTable table;
     //private static final int DEFAULTMONEY = 1250;
     //private static final int DEFAULTCREDITS = 0;
-	final String DRIVER = "com.mysql.jdbc.Driver";
-	final String DATABASE = "nielsgz146_site";
-	final String CONNECTION = "jdbc:mysql://159.253.0.127/" + DATABASE;
+    final String DRIVER     = "com.mysql.jdbc.Driver";
+    final String DATABASE   = "nielsgz146_site";
+    final String CONNECTION = "jdbc:mysql://159.253.0.127/" + DATABASE;
 
-	final String USERNAME = "nielsgz146_site";
-	
-	final String PASSWORD = "f6B4TAWU";
-	
+    final String USERNAME = "nielsgz146_site";
+
+    final String PASSWORD = "f6B4TAWU";
+
+    private SQLTask task;
+
     /**
      * <p>Enables the plugin, setting up the MySQL connections.</p>
      * <p>This should not ever be called by other plugins.</p>
      */
     @SuppressWarnings("deprecation")
-	@Override
-    public void onEnable() {
-    	setupPermissions();
+    @Override
+    public void onEnable()
+    {
+        setupPermissions();
         getServer().getPluginManager().registerEvents(this, this);
-	    
+
         table = SQLManager.getTable(this, "players");
         table.createColumn("username", ColumnType.STRING_32);
         table.createColumn("balance", ColumnType.INT);
         table.createColumn("credits", ColumnType.INT);
 
         // Update the balance of online players
-        for (Player player : getServer().getOnlinePlayers()) {
+        for (Player player : getServer().getOnlinePlayers())
+        {
             new UpdateTask(player.getName(), player.getUniqueId()).runTaskAsynchronously(this);
         }
 
+        task = new SQLTask();
+        task.runTaskTimerAsynchronously(this, 20, 20);
+
         //run repeating task to tell everyone in list that they are already registered
     }
-    public void setupPermissions(){
-    	RegisteredServiceProvider<Permission> permissionProvider = getServer().getServicesManager().getRegistration(net.milkbowl.vault.permission.Permission.class);
-        if (permissionProvider != null) {
+
+    public void setupPermissions()
+    {
+        RegisteredServiceProvider<Permission> permissionProvider = getServer().getServicesManager().getRegistration(net.milkbowl.vault.permission.Permission.class);
+        if (permissionProvider != null)
+        {
             permission = permissionProvider.getProvider();
         }
     }
@@ -114,6 +128,14 @@ public class SQLCurrency extends JavaPlugin implements Listener {
             new UpdateTask(event.getName(), event.getUniqueId()).run();
         }
     }
+
+    @EventHandler (priority = EventPriority.MONITOR)
+    public void onQuit(PlayerQuitEvent event)
+    {
+        funds.remove(event.getPlayer().getUniqueId());
+        credits.remove(event.getPlayer().getUniqueId());
+    }
+
     public void registerPlayer(Player p, String email, String password) throws IllegalArgumentException, IllegalStateException, UnsupportedEncodingException{
     	
     	new RegisterTask(p,email,password).runTaskAsynchronously(this);
@@ -127,10 +149,12 @@ public class SQLCurrency extends JavaPlugin implements Listener {
     public void add(Player player, int amount) {
         if (-amount > get(player)) throw new IllegalArgumentException("The player does not have that much funds");
         funds.put(player.getUniqueId(), funds.get(player.getUniqueId()) + amount);
-        new ModifyTask(player.getUniqueId().toString(), amount, Action.ADD).runTaskAsynchronously(this);
+        String id = player.getUniqueId().toString();
+        int current = fundsChange.containsKey(id) ? fundsChange.get(id) : 0;
+        fundsChange.put(id, current + amount);
         getServer().getPluginManager().callEvent(new CurrencyUpdateEvent(player, get(player)));
     }
-    public void addPointsOffline(String id,int amount){
+    public void addPointsOffline(String id,int amount) {
     	new ModifyTask(id, amount, Action.ADD).runTaskAsynchronously(this);
     }
     public void addCreditsOffline(String id,int amount){
@@ -139,7 +163,9 @@ public class SQLCurrency extends JavaPlugin implements Listener {
     public void addCredits(Player player, int amount) {
         if (-amount > get(player)) throw new IllegalArgumentException("The player does not have that much funds");
         credits.put(player.getUniqueId(), credits.get(player.getUniqueId()) + amount);
-        new ModifyCreditsTask(player.getUniqueId().toString(), amount, Action.ADD).runTaskAsynchronously(this);
+        String id = player.getUniqueId().toString();
+        int current = creditsChange.containsKey(id) ? creditsChange.get(id) : 0;
+        creditsChange.put(id, current + amount);
         getServer().getPluginManager().callEvent(new CurrencyUpdateEvent(player, get(player)));
     }
 
@@ -152,13 +178,17 @@ public class SQLCurrency extends JavaPlugin implements Listener {
     public void subtract(Player player, int amount) {
         if (amount > get(player)) throw new IllegalArgumentException("The player does not have that much funds");
         funds.put(player.getUniqueId(), funds.get(player.getUniqueId()) - amount);
-        new ModifyTask(player.getUniqueId().toString(), amount, Action.SUBTRACT).runTaskAsynchronously(this);
+        String id = player.getUniqueId().toString();
+        int current = fundsChange.containsKey(id) ? fundsChange.get(id) : 0;
+        fundsChange.put(id, current - amount);
         getServer().getPluginManager().callEvent(new CurrencyUpdateEvent(player, get(player)));
     }
     public void subtractCredits(Player player, int amount) {
         if (amount > get(player)) throw new IllegalArgumentException("The player does not have that much funds");
         credits.put(player.getUniqueId(), credits.get(player.getUniqueId()) - amount);
-        new ModifyCreditsTask(player.getUniqueId().toString(), amount, Action.SUBTRACT).runTaskAsynchronously(this);
+        String id = player.getUniqueId().toString();
+        int current = creditsChange.containsKey(id) ? creditsChange.get(id) : 0;
+        creditsChange.put(id, current - amount);
         getServer().getPluginManager().callEvent(new CurrencyUpdateEvent(player, get(player)));
     }
 
@@ -170,26 +200,33 @@ public class SQLCurrency extends JavaPlugin implements Listener {
      */
     public void set(Player player, int amount) {
         if (amount < 0) throw new IllegalArgumentException("You cannot set a player's balance to below 0.");
+        String id = player.getUniqueId().toString();
+        int current = fundsChange.containsKey(id) ? fundsChange.get(id) : 0;
+        int c = funds.containsKey(player.getUniqueId()) ? funds.get(player.getUniqueId()) : 0;
+        fundsChange.put(id, current + amount - c);
         funds.put(player.getUniqueId(), amount);
-        new ModifyTask(player.getUniqueId().toString(), amount, Action.SET).runTaskAsynchronously(this);
         getServer().getPluginManager().callEvent(new CurrencyUpdateEvent(player, amount));
     }
     public void setCredits(Player player, int amount) {
         if (amount < 0) throw new IllegalArgumentException("You cannot set a player's balance to below 0.");
+        String id = player.getUniqueId().toString();
+        int current = creditsChange.containsKey(id) ? creditsChange.get(id) : 0;
+        int c = credits.containsKey(player.getUniqueId()) ? credits.get(player.getUniqueId()) : 0;
+        creditsChange.put(id, current + amount - c);
         credits.put(player.getUniqueId(), amount);
-        new ModifyCreditsTask(player.getUniqueId().toString(), amount, Action.SET).runTaskAsynchronously(this);
         getServer().getPluginManager().callEvent(new CurrencyUpdateEvent(player, amount));
     }
 
     /**
-     * <p>Retrieves the current balance of a player.</p>
+     * <p>Retrieves the current balance of an online player.</p>
      *
      * @param player player to retrieve the balance of
-     * @return       the current balance of the player
+     * @return       the current balance of the player or -1 if not online
      */
     public int get(Player player) {
-        return funds.get(player.getUniqueId());
+        return funds.containsKey(player.getUniqueId()) ? funds.get(player.getUniqueId()) : -1;
     }
+
     public int getCredits(Player player) {
         return credits.get(player.getUniqueId());
     }
@@ -344,7 +381,7 @@ public class SQLCurrency extends JavaPlugin implements Listener {
 				rs.close();
 				stmt.close();
 				con.close();
-			} catch (SQLException | ClassNotFoundException e) {
+			} catch (Exception e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
@@ -363,12 +400,34 @@ public class SQLCurrency extends JavaPlugin implements Listener {
         public void run() {
             SQLEntry entry = table.createEntry(id.toString());
             entry.set("username", name);
-            int balance = entry.getInt("balance");
-            int balanceC = entry.getInt("credits");
+            int balance = Math.max(0, entry.getInt("balance"));
+            int balanceC = Math.max(0, entry.getInt("credits"));
             funds.put(id, balance);
             credits.put(id, balanceC);
             entry.set("balance", balance);
-            entry.set("credits",balanceC);
+            entry.set("credits", balanceC);
+        }
+    }
+
+    private class SQLTask extends BukkitRunnable {
+
+        @Override
+        public void run()
+        {
+            if (fundsChange.size() > 0)
+            {
+                String[] keys = fundsChange.keySet().toArray(new String[fundsChange.size()]);
+                for (String key : keys)
+                {
+                    SQLEntry entry = table.createEntry(key);
+
+                    int current = Math.max(entry.getInt("balance"), 0);
+                    current += fundsChange.get(key);
+                    entry.set("balance", current);
+
+                    fundsChange.remove(key);
+                }
+            }
         }
     }
 }
