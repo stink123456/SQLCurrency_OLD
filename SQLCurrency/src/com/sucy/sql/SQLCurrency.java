@@ -7,15 +7,12 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Random;
 import java.util.UUID;
 
 import net.milkbowl.vault.permission.Permission;
 
-import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -23,15 +20,10 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
-import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.plugin.messaging.PluginMessageListener;
 import org.bukkit.scheduler.BukkitRunnable;
 
-import com.google.common.io.ByteArrayDataInput;
-import com.google.common.io.ByteArrayDataOutput;
-import com.google.common.io.ByteStreams;
 import com.rit.sucy.sql.ColumnType;
 import com.rit.sucy.sql.direct.SQLEntry;
 import com.rit.sucy.sql.direct.SQLTable;
@@ -40,23 +32,22 @@ import com.rit.sucy.sql.direct.SQLTable;
  * <p>A simple plugin that manages player currency balances over a server network
  * using a MySQL database.</p>
  */
-public class SQLCurrency extends JavaPlugin implements Listener,PluginMessageListener {
+public class SQLCurrency extends JavaPlugin implements Listener {
 	public static Permission permission = null;
     private enum Action { ADD, SUBTRACT, SET };
 
     private final HashMap<UUID, Integer> funds = new HashMap<UUID, Integer>();
     private final HashMap<UUID, Integer> credits = new HashMap<UUID, Integer>();
     private SQLTable table;
-    private int defaultMoney = 1250;
-    private int playerCount = 0;
-    private List<Player> onlinePlayers = new ArrayList<Player>();
+    //private static final int DEFAULTMONEY = 1250;
+    //private static final int DEFAULTCREDITS = 0;
 	final String DRIVER = "com.mysql.jdbc.Driver";
-	final String DATABASE = "gamerwu85_site";
+	final String DATABASE = "nielsgz146_site";
 	final String CONNECTION = "jdbc:mysql://159.253.0.127/" + DATABASE;
 
-	final String USERNAME = "gamerwu85_dedi1";
+	final String USERNAME = "nielsgz146_site";
 	
-	final String PASSWORD = "TxuXi44x";
+	final String PASSWORD = "f6B4TAWU";
 	
     /**
      * <p>Enables the plugin, setting up the MySQL connections.</p>
@@ -67,8 +58,6 @@ public class SQLCurrency extends JavaPlugin implements Listener,PluginMessageLis
     public void onEnable() {
     	setupPermissions();
         getServer().getPluginManager().registerEvents(this, this);
-	    this.getServer().getMessenger().registerOutgoingPluginChannel(this, "BungeeCord");
-	    this.getServer().getMessenger().registerIncomingPluginChannel(this, "BungeeCord", this);
 	    
         table = SQLManager.getTable(this, "players");
         table.createColumn("username", ColumnType.STRING_32);
@@ -260,14 +249,9 @@ public class SQLCurrency extends JavaPlugin implements Listener,PluginMessageLis
         public RegisterTask(Player p, String email, String password) throws UnsupportedEncodingException {
             this.p = p;
             this.email = email;
-            //Random r = new SecureRandom();
-           // byte[] saltInBytes = new byte[16];
-          //  p.sendMessage("SaltInBytes: " + saltInBytes);
-           // r.nextBytes(saltInBytes);
             String salt = randomString(16);
-            p.sendMessage("salt: " + salt);
             this.salt = Md5.getHash(salt);
-            this.password = Md5.getHash(password + salt);
+            this.password = Md5.getHash(password + this.salt);
             
         }
         String randomString(final int length) {
@@ -381,45 +365,10 @@ public class SQLCurrency extends JavaPlugin implements Listener,PluginMessageLis
             entry.set("username", name);
             int balance = entry.getInt("balance");
             int balanceC = entry.getInt("credits");
-            balance = balance == -1 ? defaultMoney : balance;
-            balanceC = balanceC == -1 ? defaultMoney : balanceC;
             funds.put(id, balance);
             credits.put(id, balanceC);
             entry.set("balance", balance);
             entry.set("credits",balanceC);
         }
     }
-	@Override
-	  public void onPluginMessageReceived(String channel, Player player, byte[] message) {
-	    if (!channel.equals("BungeeCord")) {
-	      return;
-	    }
-	    ByteArrayDataInput in = ByteStreams.newDataInput(message);
-	    String subchannel = in.readUTF();
-	    if (subchannel.equals("PlayerCount")) {
-	    	in.readUTF();
-	    	int playercount = in.readInt();
-	    	this.playerCount = playercount;
-	      // Use the code sample in the 'Response' sections below to read
-	      // the data.
-	    	
-	    }
-	  }
-	private int getPlayers(){
-		return playerCount;
-	}
-	class PlayerCountTask extends BukkitRunnable{
-		Plugin plugin;
-		public PlayerCountTask(Plugin plugin){
-			this.plugin = plugin;
-		}
-		@Override
-		public void run() {
-			ByteArrayDataOutput out = ByteStreams.newDataOutput();
-			out.writeUTF("PlayerCount");
-			out.writeUTF("ALL");
-			Bukkit.getServer().sendPluginMessage(plugin, "BungeeCord", out.toByteArray());
-		}
-		
-	}
 }
